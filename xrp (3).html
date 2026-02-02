@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+  <title>XRP Portfolio Manager — 245 (v254)</title>
+
+  <!-- ====== CONFIG: edit only this block next time ====== -->
+  <script>
+    window.CONFIG = {
+      xrpHeld: 914,                        // total XRP holding
+      baseHeldRef: 1200,                   // reference used by original quick buttons (300/600/900 from 1200)
+      baseQuickAlloc: [300, 600, 900],     // originals. auto-scaled to xrpHeld and rounded to nearest 10
+      quickAllocRoundTo: 10,               // round quick allocation buttons to nearest N (10 keeps endings in 0)
+      interestSlider: { step: 10, defaultValue: 200 }, // interest slider step and default
+      loanSlider:     { step: 10, defaultValue: null },// null => auto = xrpHeld - interest default
+      // Price quick buttons stay the same; edit below if you want different presets
+      pricePresetsUSD: [589, 1000, 2500, 5000, 10000, 50000, 100000, 1000000]
+    };
+    // Derived config (no need to edit)
+    (function(){
+      const C = window.CONFIG;
+      const ratio = (C.xrpHeld || 0) / (C.baseHeldRef || 1);
+      C.quickAlloc = (C.baseQuickAlloc||[]).map(v => {
+        const scaled = v * ratio;
+        const r = C.quickAllocRoundTo || 1;
+        return Math.max(0, Math.round(scaled / r) * r);
+      });
+      if (C.loanSlider.defaultValue == null) {
+        C.loanSlider.defaultValue = Math.max(0, (C.xrpHeld||0) - (C.interestSlider.defaultValue||0));
+      }
+      window.CONFIG = C;
+    })();
+  </script>
+  <!-- ====== /CONFIG ===================================================== -->
+
+  <style>
+    :root{--bg:#000;--card:#000;--text:#e6edf3;--muted:#8b949e;--radius:16px;--cardBorder:#22314b;--inputBg:#050505;--accent:#2ea043;--track:#1f2a44}
+    :root.light{--bg:#ffffff;--card:#f7f9fc;--text:#0b1220;--muted:#536079;--cardBorder:#d6deea;--inputBg:#ffffff;--accent:#2ea043;--track:#d8e1f1}
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    .container{max-width:560px;margin:0 auto;padding:12px 12px 24px}
+    .row{display:flex;gap:10px}
+    .row.wrap{flex-wrap:wrap}
+    .card{background:var(--card);border-radius:var(--radius);padding:12px;border:1px solid var(--cardBorder)}
+    .pill{display:inline-flex;align-items:center;gap:6px;background:var(--inputBg);border:1px solid var(--cardBorder);padding:6px 10px;border-radius:999px;font-size:12px;color:var(--muted)}
+    .title{font-size:10px;font-weight:700;margin:0 0 8px}
+    .subtitle{font-size:12px;color:var(--muted);margin-top:2px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .tile{flex:1;min-width:46%;padding:12px;border-radius:14px;background:var(--card);border:1px solid var(--cardBorder)}
+    .tile .label{font-size:12px;color:var(--muted)}
+    .tile .val{font-size:18px;font-weight:700;margin-top:4px}
+    .btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+    button{border:0;border-radius:12px;padding:8px 10px;background:var(--inputBg);color:var(--text);border:1px solid var(--cardBorder);font-weight:600;cursor:pointer}
+    .micro{font-size:11px;padding:4px 8px;border-radius:8px;line-height:1}
+    input[type="text"]{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--cardBorder);background:var(--inputBg);color:var(--text);font-size:16px}
+    .mono{font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace}
+    .kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+    .kpi{background:var(--card);border:1px solid var(--cardBorder);border-radius:14px;padding:10px}
+    .kpi .k{font-size:12px;color:var(--muted);margin-bottom:4px}
+    .section{margin-top:12px}
+    .split{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .slider-wrap{background:var(--card);border:1px solid var(--cardBorder);border-radius:14px;padding:10px;position:relative}
+    .slider-head{display:flex;justify-content:space-between;align-items:center}
+    .slider-head .tag{font-size:12px;color:var(--muted)}
+    input[type="range"]{-webkit-appearance:none;width:100%;height:28px;background:transparent;margin-top:6px}
+    input[type="range"]::-webkit-slider-runnable-track{height:6px;background:var(--track);border-radius:10px}
+    input[type="range"]::-moz-range-track{height:6px;background:var(--track);border-radius:10px}
+    input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--accent);border:2px solid var(--inputBg);margin-top:-8px}
+    input[type="range"]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--accent);border:2px solid var(--inputBg)}
+    #priceSliderArea{display:none;margin-top:8px}
+    #quickPrice{gap:4px}
+    #quickPrice button{padding:4px 6px;font-size:12px;border-radius:10px}
+    .toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+    .tv-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px}
+    .tv-btns{display:flex;gap:6px}
+    .tv-btn{background:var(--inputBg);border:1px solid var(--cardBorder);border-radius:10px;padding:6px 10px;font-size:12px;color:var(--text);cursor:pointer}
+    .tv-btn:active{transform:translateY(1px)}
+    #toggleSliderMode{position:absolute;top:8px;right:10px}
+    .kpi .k > span{display:inline-flex;gap:4px;flex-wrap:nowrap;white-space:nowrap}
+    .ltv-inline{display:inline-flex;gap:3px;white-space:nowrap}
+    .slider-head .tag{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;white-space:nowrap}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- TRADINGVIEW -->
+    <div class="card" style="margin-bottom:8px">
+      <div class="tv-card-header">
+        <div class="title">XRPUSD — TradingView</div>
+        <div class="tv-btns">
+          <button class="tv-btn" id="btn_pair">$/€</button>
+          <button class="tv-btn" id="btn_m">m</button>
+          <button class="tv-btn" id="btn_usd_units">$0</button>
+          <button class="tv-btn" id="btn_eur_units">€0</button>
+        </div>
+      </div>
+      <div id="tv_xrp_container" style="height:420px;width:100%"></div>
+      <div id="tv_m_container" style="height:420px;width:100%;display:none"></div>
+      <div id="mini_container" style="height:420px;width:100%;display:none"></div>
+    </div>
+
+    <!-- TILES -->
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div class="subtitle" id="source">source: —</div>
+        <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
+          <button id="btn_theme" class="micro">Dark/Light Mode</button>
+          <button id="refreshBtn" class="micro">⟳</button>
+        </div>
+      </div>
+      <div class="grid section">
+        <div class="tile"><div class="label">XRPEUR</div><div class="val mono" id="xrpEur">€0.00</div></div>
+        <div class="tile"><div class="label">XRPUSD</div><div class="val mono" id="xrpUsdTile">$0.00</div></div>
+        <div class="tile"><div class="label">XRPEUR × <span id="unitsLabelEUR"></span></div><div class="val mono" id="eurHeld">€0</div></div>
+        <div class="tile"><div class="label">XRPUSD × <span id="unitsLabelUSD"></span></div><div class="val mono" id="usdHeld">$0</div></div>
+      </div>
+    </div>
+
+    <!-- PORTFOLIO -->
+    <div class="card section">
+      <div class="row" style="align-items:center;margin-bottom:8px;gap:6px">
+        <h3 class="title" style="margin:0">XRP Portfolio Manager</h3>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+          <button id="pmToggleCurrency" class="micro">€</button>
+          <div class="pill" id="now">—</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="row" style="gap:8px;margin-top:6px">
+          <div style="flex:1.2"><input id="priceOverride" type="text" inputmode="numeric" placeholder="$0"></div>
+          <div class="toolbar">
+            <div id="priceShortBox" style="display:flex;flex-direction:column;line-height:1.1;min-width:72px">
+              <span id="priceShort" class="subtitle mono"></span>
+              <span id="priceShortEUR" class="subtitle mono"></span>
+            </div>
+            <button id="togglePriceSlider">Slider</button>
+            <button id="clearOverride">Use live</button>
+          </div>
+        </div>
+
+        <div class="btns" id="quickPrice"></div>
+
+        <div id="priceSliderArea" class="slider-wrap">
+          <div class="slider-head">
+            <div>
+              <div class="tag">Price Slider: <span id="sliderModeLabel">log ($100-$1.000.000)</span></div>
+              <div class="mono" id="priceSliderVal">$0</div>
+            </div>
+            <button id="toggleSliderMode" class="micro">Mode</button>
+          </div>
+          <input id="priceSlider" type="range" min="0" max="1000" step="1" value="500">
+        </div>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi">
+          <div class="k" style="display:flex;justify-content:space-between;align-items:center">Portfolio Value <span class="subtitle mono" id="pvShortTop"></span></div>
+          <div class="v"><input class="mono" id="inpPortfolioVal" type="text" placeholder="$0"></div>
+        </div>
+        <div class="kpi">
+          <div class="k" style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+            APY <span><button id="apy5" class="micro">5%</button> <button id="apy7_5" class="micro">7.5%</button> <button id="apy10" class="micro">10%</button> <button id="apyReset" class="micro">r</button></span>
+          </div>
+         <center><div class="v mono" id="apy">0%</div></center>
+        </div>
+      </div>
+
+      <div class="split section">
+        <div class="slider-wrap">
+          <div class="slider-head">
+            <div>
+              <div class="tag">XRP Allocated Interest/year</div>
+              <div class="inline-pair"><div class="mono" id="intXrp">0 XRP</div><div class="subtitle mono" id="intUsd">$0</div></div>
+            </div>
+          </div>
+          <input id="interestSlider" type="range" min="0" max="0" step="1" value="0">
+          <div class="subtitle mono" id="interestEarned">Interest: $0</div>
+        </div>
+
+        <div class="slider-wrap">
+          <div class="slider-head">
+            <div>
+              <div class="tag">Loan. LTV%: <span class="ltv-inline"><button class="micro" data-ltv="0.30">30</button><button class="micro" data-ltv="0.60">60</button><button class="micro" data-ltv="0.90">90</button></span></div>
+              <div class="inline-pair"><div class="mono" id="loanXrp">0 XRP</div><div class="subtitle mono" id="loanUsd">$0</div></div>
+            </div>
+          </div>
+          <input id="loanSlider" type="range" min="0" max="0" step="1" value="0">
+          <div class="subtitle mono" id="loanAmount">Loan: $0</div>
+        </div>
+      </div>
+
+      <div class="row" style="justify-content:space-between;align-items:center;margin-top:8px">
+        <div class="toolbar" id="allocBtns"></div>
+        <div class="toolbar"><button id="showMS" class="micro">show minute/second</button></div>
+      </div>
+
+      <div class="kpis section" id="earningsKpis">
+        <div class="kpi"><div class="k">Monthly Earnings</div><div class="v"><input class="mono" id="inpMonthly" type="text" placeholder="$0"></div></div>
+        <div class="kpi"><div class="k">Weekly Earnings</div><div class="v"><input class="mono" id="inpWeekly" type="text" placeholder="$0"></div></div>
+        <div class="kpi"><div class="k">Daily Earnings</div><div class="v"><input class="mono" id="inpDaily" type="text" placeholder="$0"></div></div>
+        <div class="kpi"><div class="k">Hourly Earnings</div><div class="v"><input class="mono" id="inpHourly" type="text" placeholder="$0"></div></div>
+        <div class="kpi" id="kpiMinutely" style="display:none"><div class="k">Minutely Earnings</div><div class="v"><input class="mono" id="inpMinutely" type="text" placeholder="$0"></div></div>
+        <div class="kpi" id="kpiSecondly" style="display:none"><div class="k">Secondly Earnings</div><div class="v"><input class="mono" id="inpSecondly" type="text" placeholder="$0"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOGIC -->
+  <script>
+    const C = window.CONFIG;
+    const el = id => document.getElementById(id);
+    const clamp = (v,min,max)=> Math.max(min, Math.min(max,v));
+    function parseMoneyStrict(s){ if(s===undefined || s===null) return NaN; const raw = String(s).replace(/[\$€\s,\.]/g,'').replace(/[^\d-]/g,''); if(!raw || raw==='-') return NaN; return Number(raw); }
+    function fmtIntWithDots(n){ const i = Math.round(Number(n)||0); const sign=i<0?'-':''; const s=String(Math.abs(i)); let out=''; for(let j=0;j<s.length;j++){ const idx=s.length-j; out=s[idx-1]+out; if(j%3===2 && idx>1) out='.'+out; } return sign+out; }
+    const fmtUSD = (n)=> new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(n||0);
+    const fmtEUR = (n)=> new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR',maximumFractionDigits:2}).format(n||0);
+    const fmtUSDintDot=(n)=>'$'+fmtIntWithDots(n);
+    const fmtEURintDot=(n)=>'€'+fmtIntWithDots(n);
+    function fmtUSDshort(n){const abs=Math.abs(Number(n)||0), sign=(n||0)<0?'-':''; const units=[{v:1e15,s:'q'},{v:1e12,s:'t'},{v:1e9,s:'b'},{v:1e6,s:'m'},{v:1e3,s:'k'}]; for(const u of units){ if(abs>=u.v){ const v=abs/u.v; const d=(abs<100*u.v)?1:0; const str= v.toFixed(d).replace(/\.0$/,''); return sign+'$'+str+u.s; } } return fmtUSDintDot(n); }
+    function fmtEURshort(n){const abs=Math.abs(Number(n)||0), sign=(n||0)<0?'-':''; const units=[{v:1e15,s:'q'},{v:1e12,s:'t'},{v:1e9,s:'b'},{v:1e6,s:'m'},{v:1e3,s:'k'}]; for(const u of units){ if(abs>=u.v){ const v=abs/u.v; const d=(abs<100*u.v)?1:0; const str= v.toFixed(d).replace(/\.0$/,''); return sign+'€'+str+u.s; } } return fmtEURintDot(n); }
+    function fmtPresetUSD(n){ const abs=Math.abs(Number(n)||0); if(abs>=1_000_000){ const raw=abs/1_000_000; const str=(raw<10?raw.toFixed(1):Math.round(raw)).toString().replace(/\.0$/,''); return '$'+str+'m'; } if(abs>=1_000){ const raw=abs/1_000; const str=(raw<10?raw.toFixed(1):Math.round(raw)).toString().replace(/\.0$/,''); return '$'+str+'k'; } return '$'+Math.round(abs); }
+
+    const state = {
+      priceUSD: 0, priceEUR: 0, fxEURperUSD: 0,
+      xrpHeld: C.xrpHeld,
+      overrideUSD: null, apyOverride: null,
+      msVisible: false, priceSliderVisible: false,
+      tilesPreferLive: false, ltv: 0.30,
+      pmCurrency: 'USD', sliderMode: 'log'
+    };
+
+    function setNow(){ el('now').textContent = new Date().toLocaleString(undefined,{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
+
+    async function fetchPrices(){
+      try{
+        const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd,eur',{cache:'no-store'});
+        if(!r.ok) throw 0;
+        const j = await r.json();
+        state.priceUSD = Number(j.ripple.usd)||0;
+        state.priceEUR = Number(j.ripple.eur)||0;
+        state.fxEURperUSD = state.priceEUR / (state.priceUSD || 1);
+        el('source').textContent = state.overrideUSD!==null ? 'source: Override' : 'source: CoinGecko';
+      }catch(e){
+        try{
+          const [usdR, eurR] = await Promise.all([
+            fetch('https://api.coinbase.com/v2/prices/XRP-USD/spot',{cache:'no-store'}),
+            fetch('https://api.coinbase.com/v2/prices/XRP-EUR/spot',{cache:'no-store'})
+          ]);
+          const usdJ = await usdR.json(), eurJ = await eurR.json();
+          state.priceUSD = Number(usdJ.data.amount)||0;
+          state.priceEUR = Number(eurJ.data.amount)||0;
+          state.fxEURperUSD = state.priceEUR / (state.priceUSD || 1);
+          el('source').textContent = state.overrideUSD!==null ? 'source: Override' : 'source: Coinbase';
+        }catch(_){
+          el('source').textContent = 'source: —';
+        }
+      }
+      const po = el('priceOverride');
+      if(po && !po.value){ po.placeholder = fmtUSDintDot(state.priceUSD); }
+      render();
+    }
+
+    function usedUSDPrice(){ return (state.overrideUSD!==null) ? state.overrideUSD : state.priceUSD; }
+    function setOverridePriceInt(p){ const pi = Math.max(1, Math.round(p||0)); state.overrideUSD = pi; state.tilesPreferLive = false; render(); }
+
+    function render(){
+      // static labels from CONFIG
+      el('unitsLabelEUR').textContent = C.xrpHeld.toLocaleString('en-US');
+      el('unitsLabelUSD').textContent = C.xrpHeld.toLocaleString('en-US');
+
+      // tiles
+      const tileUSD = state.tilesPreferLive ? state.priceUSD : ((state.overrideUSD!==null)?state.overrideUSD:state.priceUSD);
+      const tileEUR = state.fxEURperUSD ? tileUSD * state.fxEURperUSD : state.priceEUR;
+      el('xrpUsdTile').textContent = fmtUSD(tileUSD);
+      el('xrpEur').textContent = fmtEUR(tileEUR);
+      el('eurHeld').textContent = fmtEURintDot(tileEUR * state.xrpHeld);
+      el('usdHeld').textContent = fmtUSDintDot(tileUSD * state.xrpHeld);
+
+      // portfolio (selected currency)
+      const usdPrice = usedUSDPrice();
+      const eurPrice = (state.fxEURperUSD||0) * usdPrice;
+      const usedPrice = (state.pmCurrency==='EUR') ? eurPrice : usdPrice;
+      const portVal = (state.xrpHeld||0) * (usedPrice||0);
+      el('pvShortTop').textContent = (state.pmCurrency==='EUR') ? fmtEURshort(portVal) : fmtUSDshort(portVal);
+      const inpPV = el('inpPortfolioVal'); if(inpPV && document.activeElement !== inpPV){ inpPV.value = (state.pmCurrency==='EUR') ? fmtEURintDot(portVal) : fmtUSDintDot(portVal); }
+
+      // allocation
+      const intXrp = Number(el('interestSlider').value||0);
+      const loanXrp = state.xrpHeld - intXrp;
+      const intUsd = intXrp * usdPrice;
+      const loanUsd = loanXrp * usdPrice;
+      el('intXrp').textContent = (intXrp).toLocaleString('en-US') + ' XRP';
+      el('loanXrp').textContent = (loanXrp).toLocaleString('en-US') + ' XRP';
+      if(state.pmCurrency==='EUR'){
+        const fx = state.fxEURperUSD||1;
+        el('intUsd').textContent = fmtEURshort(intUsd*fx);
+        el('loanUsd').textContent = fmtEURshort(loanUsd*fx);
+        el('loanAmount').textContent = 'Loan: ' + fmtEURintDot(loanUsd*state.ltv*fx);
+      }else{
+        el('intUsd').textContent = fmtUSDshort(intUsd);
+        el('loanUsd').textContent = fmtUSDshort(loanUsd);
+        el('loanAmount').textContent = 'Loan: ' + fmtUSDintDot(loanUsd*state.ltv);
+      }
+
+      // APY + earnings (USD notional)
+      const {earn, apyPct} = blendedAPY(intUsd);
+      el('apy').textContent = apyPct.toFixed(2)+'%';
+      const fx = state.fxEURperUSD||1;
+      el('interestEarned').textContent = 'Interest: ' + ((state.pmCurrency==='EUR')? fmtEURintDot(earn*fx) : fmtUSDintDot(earn));
+
+      const monthly = earn/12, weekly=earn/52, daily=earn/365, hourly=daily/24, minutely=hourly/60, secondly=minutely/60;
+      const setIfIdle=(id,val)=>{ const n=el(id); if(!n) return; if(document.activeElement!==n){ n.value = (state.pmCurrency==='EUR')? fmtEURintDot(val*fx) : fmtUSDintDot(val); } };
+      setIfIdle('inpMonthly',monthly); setIfIdle('inpWeekly',weekly); setIfIdle('inpDaily',daily); setIfIdle('inpHourly',hourly);
+      if(state.msVisible){ setIfIdle('inpMinutely',minutely); setIfIdle('inpSecondly',secondly); }
+
+      // price readouts
+      const baseUSD = (state.overrideUSD!==null)?state.overrideUSD:usdPrice;
+      const disp = (state.pmCurrency==='EUR') ? baseUSD*fx : baseUSD;
+      el('priceSliderVal').textContent = (state.pmCurrency==='EUR') ? fmtEURintDot(disp) : fmtUSDintDot(disp);
+      el('priceShort').textContent = (state.pmCurrency==='EUR')? fmtEURshort(disp) : fmtUSDshort(disp);
+      el('priceShortEUR').textContent = (state.pmCurrency==='EUR')? fmtUSDshort(baseUSD) : fmtEURshort(baseUSD*fx);
+
+      // override input formatting
+      const po=el('priceOverride');
+      if(po && document.activeElement!==po){
+        if(state.overrideUSD!==null){
+          const fx=state.fxEURperUSD||1;
+          po.value = (state.pmCurrency==='EUR')? fmtEURintDot(state.overrideUSD*fx) : fmtUSDintDot(state.overrideUSD);
+        }else{
+          po.value = '';
+          po.placeholder = (state.pmCurrency==='EUR')? fmtEURintDot(state.priceUSD*(state.fxEURperUSD||1)): fmtUSDintDot(state.priceUSD);
+        }
+      }
+
+      // slider label
+      el('sliderModeLabel').textContent = (state.sliderMode==='log')? 'log ($100-$1.000.000)' : 'low ($3-$100)';
+    }
+
+    function blendedAPY(usdNotional){
+      if(state.apyOverride!==null){
+        const earn = usdNotional * state.apyOverride;
+        return {earn, apyPct: state.apyOverride*100};
+      }
+      const t1 = Math.min(usdNotional, 10_000_000);
+      const t2 = Math.max(usdNotional - 10_000_000, 0);
+      const earn = t1*0.10 + t2*0.07;
+      const apyPct = usdNotional>0 ? (earn/usdNotional)*100 : 0;
+      return {earn, apyPct};
+    }
+
+    // Slider mapping
+    const SL_POS_MIN=0, SL_POS_MAX=1000;
+    const LOG_MIN=100, LOG_MAX=1_000_000;
+    const lnMin=Math.log(LOG_MIN), lnMax=Math.log(LOG_MAX), lnSpan=lnMax-lnMin;
+    function posToPriceLog(pos){ const t=clamp(pos,SL_POS_MIN,SL_POS_MAX)/SL_POS_MAX; const p=Math.exp(lnMin+t*lnSpan); const step=100; return clamp(Math.round(p/step)*step, LOG_MIN, LOG_MAX); }
+    function priceToPosLog(price){ const p=clamp(price,LOG_MIN,LOG_MAX); const t=(Math.log(p)-lnMin)/lnSpan; return Math.round(t*SL_POS_MAX); }
+    const LOW_MIN=3, LOW_MAX=100;
+    function posToPriceLow(pos){ const t=clamp(pos,SL_POS_MIN,SL_POS_MAX)/SL_POS_MAX; return Math.round(LOW_MIN + t*(LOW_MAX-LOW_MIN)); }
+    function priceToPosLow(price){ const p=clamp(price,LOW_MIN,LOW_MAX); const t=(p-LOW_MIN)/(LOW_MAX-LOW_MIN); return Math.round(t*SL_POS_MAX); }
+    function syncPriceSliderTo(price){
+      const sl=el('priceSlider'); if(!sl) return;
+      const base=Number.isFinite(price)?price:(state.sliderMode==='log'?10000:50);
+      sl.value = String((state.sliderMode==='log')? priceToPosLog(base) : priceToPosLow(base));
+      render();
+    }
+
+    // Wiring
+    function wirePriceControls(){
+      const po=el('priceOverride'), btnLive=el('clearOverride');
+      const btnSldr=el('togglePriceSlider'), area=el('priceSliderArea'), sl=el('priceSlider');
+      // build price presets
+      const qp=el('quickPrice');
+      if(qp){
+        qp.innerHTML = (C.pricePresetsUSD||[]).map(v=>`<button data-price="${v}">${fmtPresetUSD(v)}</button>`).join('');
+      }
+      if(po){
+        po.addEventListener('input', ()=>{
+          const v=parseMoneyStrict(po.value);
+          if(Number.isFinite(v)&&v>0){
+            const usdVal = (state.pmCurrency==='EUR') ? (v/(state.fxEURperUSD||1)) : v;
+            state.overrideUSD = Math.max(1, Math.round(usdVal));
+            el('source').textContent='source: Override';
+          }else{
+            state.overrideUSD=null;
+            el('source').textContent='source: CoinGecko';
+          }
+          render();
+        });
+        po.addEventListener('blur', ()=>{
+          if(state.overrideUSD!==null){
+            const fx=state.fxEURperUSD||1;
+            po.value = (state.pmCurrency==='EUR')? fmtEURintDot(state.overrideUSD*fx) : fmtUSDintDot(state.overrideUSD);
+          }else{ po.value=''; }
+        });
+      }
+      if(btnLive){ btnLive.addEventListener('click', ()=>{ state.overrideUSD=null; if(po) po.value=''; el('source').textContent='source: CoinGecko'; render(); }); }
+      if(btnSldr){ btnSldr.addEventListener('click', ()=>{ state.priceSliderVisible=!state.priceSliderVisible; area.style.display=state.priceSliderVisible?'block':'none'; if(state.priceSliderVisible){ const base=(state.overrideUSD!==null)?state.overrideUSD:(state.sliderMode==='log'?10000:50); syncPriceSliderTo(base); } }); }
+      const btnMode = el('toggleSliderMode');
+      if(btnMode){
+        btnMode.addEventListener('click', ()=>{
+          state.sliderMode = (state.sliderMode==='log') ? 'low' : 'log';
+          const baseVal = (state.sliderMode==='log') ? 10000 : 50;
+          syncPriceSliderTo(baseVal);
+          render();
+        });
+      }
+      if(sl){
+        sl.addEventListener('input', ()=>{
+          const raw=Number(sl.value);
+          const price=(state.sliderMode==='log')?posToPriceLog(raw):posToPriceLow(raw);
+          setOverridePriceInt(price);
+          const fx=state.fxEURperUSD||1;
+          el('priceSliderVal').textContent = (state.pmCurrency==='EUR')? fmtEURintDot(price*fx) : fmtUSDintDot(price);
+          el('priceShort').textContent     = (state.pmCurrency==='EUR')? fmtEURshort(price*fx) : fmtUSDshort(price);
+          el('priceShortEUR').textContent  = (state.pmCurrency==='EUR')? fmtUSDshort(price) : fmtEURshort(price*fx);
+        });
+      }
+      if(qp){
+        qp.addEventListener('click', (e)=>{
+          const v=e.target.getAttribute?.('data-price'); if(!v) return;
+          const num=Number(v); if(!Number.isFinite(num) || num<=0) return;
+          setOverridePriceInt(num);
+        });
+      }
+    }
+
+    function ensureInterestSide(){
+      const intS=el('interestSlider'); const loanS=el('loanSlider');
+      let v=Number(intS.value); if(!Number.isFinite(v) || v<0){ v = C.interestSlider.defaultValue||0; }
+      intS.value=String(clamp(v,0,C.xrpHeld));
+      loanS.value=String(clamp(C.xrpHeld - Number(intS.value),0,C.xrpHeld));
+      return Number(intS.value);
+    }
+
+    function setPriceForTargetAnnualEarn(targetAnnual){
+      ensureInterestSide();
+      const targetUSD = (state.pmCurrency==='EUR')? (targetAnnual/(state.fxEURperUSD||1)) : targetAnnual;
+      const intUsdNeeded = (state.apyOverride!==null)
+        ? (targetUSD / (state.apyOverride || 0.000001))
+        : (targetUSD <= 1_000_000 ? targetUSD/0.10 : 10_000_000 + (targetUSD-1_000_000)/0.07);
+      const intXrp = Number(el('interestSlider').value||1);
+      const price = intUsdNeeded / intXrp;
+      setOverridePriceInt(price);
+    }
+
+    function wireKpiInputs(){
+      function attachCommit(id, compute){
+        const n=el(id); if(!n) return;
+        n.addEventListener('keydown',(e)=>{ if(e.key==='Enter'){ e.currentTarget.blur(); } });
+        n.addEventListener('blur', (e)=>{
+          const v=parseMoneyStrict(e.target.value);
+          if(Number.isFinite(v)&&v>0){
+            compute(v);
+            n.value = (state.pmCurrency==='EUR')? fmtEURintDot(v) : fmtUSDintDot(v);
+          }else{ n.value=''; }
+        });
+      }
+      attachCommit('inpPortfolioVal', (displayVal)=>{
+        const fx = state.fxEURperUSD || 1;
+        const usd = (state.pmCurrency==='EUR') ? (displayVal / fx) : displayVal;
+        setOverridePriceInt(usd / (state.xrpHeld || 1));
+      });
+      attachCommit('inpMonthly', (v)=> setPriceForTargetAnnualEarn(v*12));
+      attachCommit('inpWeekly',  (v)=> setPriceForTargetAnnualEarn(v*52));
+      attachCommit('inpDaily',   (v)=> setPriceForTargetAnnualEarn(v*365));
+      attachCommit('inpHourly',  (v)=> setPriceForTargetAnnualEarn(v*24*365));
+      attachCommit('inpMinutely',(v)=> setPriceForTargetAnnualEarn(v*60*24*365));
+      attachCommit('inpSecondly',(v)=> setPriceForTargetAnnualEarn(v*60*60*24*365));
+    }
+
+    function wireLTVButtons(){
+      const container = document.querySelector('.ltv-inline'); if(!container) return;
+      container.addEventListener('click', (e)=>{
+        const btn = e.target.closest('[data-ltv]'); if(!btn) return;
+        state.ltv = Number(btn.getAttribute('data-ltv'))||0.3;
+        render();
+      });
+    }
+
+    function wireAllocation(){
+      const intS=el('interestSlider'), loanS=el('loanSlider');
+      const setBoth=(intVal)=>{
+        const v=clamp(Number(intVal)||0,0,C.xrpHeld);
+        intS.value=String(v);
+        loanS.value=String(C.xrpHeld - v);
+        render();
+      };
+      intS.addEventListener('input', (e)=> setBoth(e.target.value));
+      loanS.addEventListener('input', (e)=> setBoth(C.xrpHeld - Number(e.target.value)));
+      // quick allocation buttons
+      document.querySelectorAll('button[data-xrp]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const xrp = parseInt(btn.getAttribute('data-xrp'),10);
+          if(!isFinite(xrp)) return;
+          setBoth(xrp);
+        });
+      });
+    }
+
+    function wireMisc(){
+      el('showMS').addEventListener('click', ()=>{
+        state.msVisible = !state.msVisible;
+        el('kpiMinutely').style.display = state.msVisible ? '' : 'none';
+        el('kpiSecondly').style.display = state.msVisible ? '' : 'none';
+        render();
+      });
+      el('apy5').addEventListener('click', ()=>{ state.apyOverride=0.05; render(); });
+      el('apy7_5').addEventListener('click', ()=>{ state.apyOverride=0.075; render(); });
+      el('apy10').addEventListener('click', ()=>{ state.apyOverride=0.10; render(); });
+      el('apyReset').addEventListener('click', ()=>{ state.apyOverride=null; render(); });
+    }
+
+    function wireRefreshButton(){
+      const btn = document.getElementById('refreshBtn');
+      if(!btn) return;
+      btn.addEventListener('click', ()=>{ state.tilesPreferLive=true; fetchPrices(); });
+    }
+
+    function wireThemeButton(){
+      const btnTheme = document.getElementById("btn_theme");
+      if(!btnTheme) return;
+      btnTheme.addEventListener("click", function(){
+        var root = document.documentElement;
+        if(root.classList.contains('light')) root.classList.remove('light');
+        else root.classList.add('light');
+        if(window.tvSetTheme){ window.tvSetTheme(); }
+      });
+    }
+
+    function wireCurrencyButton(){
+      const btn = document.getElementById('pmToggleCurrency'); if(!btn) return;
+      const updateLabel=()=>{ btn.textContent = (state.pmCurrency==='USD') ? '€' : '$'; };
+      btn.addEventListener('click', ()=>{
+        state.pmCurrency = (state.pmCurrency==='USD') ? 'EUR' : 'USD';
+        updateLabel();
+        const base = (state.overrideUSD!==null)?state.overrideUSD:(state.sliderMode==='log'?10000:50);
+        syncPriceSliderTo(base);
+      });
+      updateLabel();
+    }
+
+    function buildDynamicUI(){
+      // title and units in header buttons
+      document.title = `XRP Portfolio Manager — ${C.xrpHeld} (v254)`;
+      const usdBtn = el('btn_usd_units'); if(usdBtn) usdBtn.textContent = '$'+C.xrpHeld;
+      const eurBtn = el('btn_eur_units'); if(eurBtn) eurBtn.textContent = '€'+C.xrpHeld;
+      // units labels
+      el('unitsLabelEUR').textContent = C.xrpHeld.toLocaleString('en-US');
+      el('unitsLabelUSD').textContent = C.xrpHeld.toLocaleString('en-US');
+      // sliders config
+      const intS=el('interestSlider'), loanS=el('loanSlider');
+      intS.max = String(C.xrpHeld); intS.step = String(C.interestSlider.step||1); intS.value = String(Math.min(C.xrpHeld, C.interestSlider.defaultValue||0));
+      loanS.max= String(C.xrpHeld); loanS.step= String(C.loanSlider.step||1);     loanS.value= String(Math.min(C.xrpHeld, C.loanSlider.defaultValue||0));
+      // quick alloc buttons
+      const alloc = el('allocBtns');
+      if(alloc){
+        alloc.innerHTML = (C.quickAlloc||[]).map(v=>`<button data-xrp="${v}" class="micro">${v} XRP</button>`).join('');
+      }
+      // price quick buttons
+      const qp=el('quickPrice');
+      if(qp){
+        qp.innerHTML = (C.pricePresetsUSD||[]).map(v=>`<button data-price="${v}">${fmtPresetUSD(v)}</button>`).join('');
+      }
+    }
+
+    function init(){
+      buildDynamicUI();
+      setNow(); setInterval(setNow, 60_000);
+      wirePriceControls();
+      wireKpiInputs();
+      wireAllocation();
+      wireLTVButtons();
+      wireMisc();
+      wireRefreshButton();
+      wireThemeButton();
+      wireCurrencyButton();
+      fetchPrices(); setInterval(fetchPrices, 60_000);
+      render();
+    }
+    init();
+  </script>
+
+  <!-- TRADINGVIEW EMBEDS -->
+  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+  <script>
+    (function(){
+      var headerEl = document.querySelector(".tv-card-header .title");
+      function setHeaderLabel(sym){ if(headerEl) headerEl.textContent = sym; }
+      var mode = "advanced";           // advanced | overview | mini
+      var isEUR = false;               // $/€
+      var mFirst = true;               // first 'm' press = XRPUSD
+      var mIsEUR = false;              // toggler for 'm'
+      var kCurrency = null;            // 'usd' or 'eur' for holdings buttons
+      var lastSymbol = "BITSTAMP:XRPUSD";
+      var lastOverviewSymbol = "BITSTAMP:XRPUSD";
+      var lastExpr = null;
+      function currentTheme(){ return document.documentElement.classList.contains('light') ? "light" : "dark"; }
+
+      function showContainer(which){
+        mode = which;
+        var adv  = document.getElementById("tv_xrp_container");
+        var ov   = document.getElementById("tv_m_container");
+        var mini = document.getElementById("mini_container");
+        if(adv)  adv.style.display  = which==="advanced" ? "block":"none";
+        if(ov)   ov.style.display   = which==="overview" ? "block":"none";
+        if(mini) mini.style.display = which==="mini" ? "block":"none";
+      }
+
+      function mountAdvanced(symbol){
+        if(!window.TradingView) return;
+        var el = document.getElementById("tv_xrp_container");
+        if(el) el.innerHTML = "";
+        new TradingView.widget({
+          autosize: true,
+          symbol: symbol,
+          interval: "60",
+          timezone: "Etc/UTC",
+          theme: currentTheme(),
+          style: "1",
+          withdateranges: true,
+          hide_side_toolbar: true,
+          hide_legend: true,
+          hide_volume: true,
+          allow_symbol_change: false,
+          studies: [],
+          container_id: "tv_xrp_container"
+        });
+        showContainer("advanced");
+        setHeaderLabel(symbol.split(":").pop());
+      }
+
+      function mountOverview(symbol){
+        var container = document.getElementById("tv_m_container");
+        if(!container) return;
+        container.innerHTML = "";
+        var wrapper = document.createElement("div");
+        wrapper.className = "tradingview-widget-container";
+        var inner = document.createElement("div");
+        inner.className = "tradingview-widget-container__widget";
+        wrapper.appendChild(inner);
+        var s = document.createElement("script");
+        s.type = "text/javascript"; s.async = true;
+        s.src = "https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js";
+        var cfg = {
+          "symbols": [[ symbol + "|7D" ]],
+          "chartOnly": false, "width": "100%","height": "100%","locale": "en",
+          "colorTheme": currentTheme(), "autosize": true,"showVolume": false,"showMA": false,
+          "hideDateRanges": false,"hideMarketStatus": true,"hideSymbolLogo": false,
+          "scalePosition": "right","scaleMode": "Normal","fontFamily": "-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif",
+          "fontSize": "10","noTimeScale": false,"valuesTracking": "1","changeMode": "price-and-percent","chartType": "area",
+          "maLineColor": "#2962FF","maLineWidth": 1,"maLength": 9,"headerFontSize": "medium","lineWidth": 2,"lineType": 0,
+          "dateRanges": ["1w|60","1m|30","3m|60","ytd|1D","12m|1D","60m|1W","all|1M"],"dateFormat": "dd MMM 'yy"
+        };
+        s.innerHTML = JSON.stringify(cfg);
+        wrapper.appendChild(s);
+        container.appendChild(wrapper);
+        showContainer("overview");
+        setHeaderLabel(symbol.split(":").pop());
+      }
+
+      function mountOverviewUnits(symbolExpr){
+        var mini = document.getElementById("mini_container");
+        if(!mini) return;
+        mini.innerHTML = "";
+        var wrapper = document.createElement("div");
+        wrapper.className = "tradingview-widget-container";
+        var inner = document.createElement("div");
+        inner.className = "tradingview-widget-container__widget";
+        wrapper.appendChild(inner);
+        var s = document.createElement("script");
+        s.type = "text/javascript"; s.async = true;
+        s.src = "https://s3.tradingview.com/external-embedding/embed-widget-symbol-overview.js";
+        var cfg = {
+          "symbols": [[ symbolExpr + "|7D" ]],
+          "chartOnly": false,"width": "100%","height": "100%","locale": "en","colorTheme": currentTheme(),
+          "autosize": true,"showVolume": false,"showMA": false,"hideDateRanges": false,"hideMarketStatus": true,"hideSymbolLogo": false,
+          "scalePosition": "right","scaleMode": "Normal","fontFamily": "-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif",
+          "fontSize": "10","noTimeScale": false,"valuesTracking": "1","changeMode": "price-and-percent","chartType": "area",
+          "maLineColor": "#2962FF","maLineWidth": 1,"maLength": 9,"headerFontSize": "medium","lineWidth": 2,"lineType": 0,
+          "dateRanges": ["1w|1D","1m|1D","3m|1D","ytd|1D","12m|1D","60m|1W","all|1M"],"dateFormat": "dd MMM 'yy"
+        };
+        s.innerHTML = JSON.stringify(cfg);
+        wrapper.appendChild(s);
+        mini.appendChild(wrapper);
+        showContainer("mini");
+        setHeaderLabel(symbolExpr.split(":").pop());
+      }
+
+      // global re-theme hook
+      window.tvSetTheme = function(){
+        if(mode === "advanced"){ mountAdvanced(lastSymbol); }
+        else if(mode === "overview"){ mountOverview(lastOverviewSymbol); }
+        else if(mode === "mini" && lastExpr){ mountOverviewUnits(lastExpr); }
+      };
+
+      // buttons
+      var btnPair = document.getElementById("btn_pair");
+      var btnM    = document.getElementById("btn_m");
+      var btnUSD  = document.getElementById("btn_usd_units");
+      var btnEUR  = document.getElementById("btn_eur_units");
+
+      if(btnPair){
+        btnPair.addEventListener("click", function(){
+          isEUR = !isEUR;
+          var sym = isEUR ? "BITSTAMP:XRPEUR" : "BITSTAMP:XRPUSD";
+          mountAdvanced(sym);
+        });
+      }
+
+      if(btnM){
+        btnM.addEventListener("click", function(){
+        if(mFirst){ mFirst = false; mIsEUR = false; } else { mIsEUR = !mIsEUR; }
+          var sym = mIsEUR ? "BITSTAMP:XRPEUR" : "BITSTAMP:XRPUSD";
+          mountOverview(sym);
+        });
+      }
+
+      if(btnUSD){
+        btnUSD.addEventListener("click", function(){
+          var expr = "BITSTAMP:XRPUSD*" + (window.CONFIG?.xrpHeld||0);
+          if(mode === "advanced" && kCurrency === "usd"){
+            mountOverviewUnits(expr);
+          } else {
+            mountAdvanced(expr);
+            kCurrency = "usd";
+          }
+        });
+      }
+      if(btnEUR){
+        btnEUR.addEventListener("click", function(){
+          var expr = "BITSTAMP:XRPEUR*" + (window.CONFIG?.xrpHeld||0);
+          if(mode === "advanced" && kCurrency === "eur"){
+            mountOverviewUnits(expr);
+          } else {
+            mountAdvanced(expr);
+            kCurrency = "eur";
+          }
+        });
+      }
+
+      // init
+      showContainer("advanced");
+      // set button labels to match CONFIG
+      try{
+        var C = window.CONFIG||{};
+        var usdBtn = document.getElementById('btn_usd_units'); if(usdBtn) usdBtn.textContent = '$'+(C.xrpHeld||0);
+        var eurBtn = document.getElementById('btn_eur_units'); if(eurBtn) eurBtn.textContent = '€'+(C.xrpHeld||0);
+      }catch(_){}
+      mountAdvanced("BITSTAMP:XRPUSD");
+    })();
+  </script>
+</body>
+</html>
