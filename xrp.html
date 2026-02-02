@@ -474,7 +474,7 @@
       const container = document.querySelector('.ltv-inline'); if(!container) return;
       container.addEventListener('click', (e)=>{
         const btn = e.target.closest('[data-ltv]'); if(!btn) return;
-        state.ltv = Number(btn.getAttribute('data-ltv'))||0.3;
+        state.ltv = Number(btn.getAttribute('data-ltv'))||0.9;
         render();
       });
     }
